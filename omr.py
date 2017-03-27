@@ -1,5 +1,4 @@
 import cv2
-import cv2.cv as cv
 from gamera.core import *
 from gamera.toolkits.musicstaves import musicstaves_rl_simple
 from gamera.toolkits.musicstaves import stafffinder_miyao
@@ -8,8 +7,6 @@ import sys
 
 
 def detect_staves(img_name):
-    init_gamera()
-
     image = load_image(img_name)
     image = image.to_onebit()
     ancho = image.ncols
@@ -35,28 +32,69 @@ def detect_staves(img_name):
     return staff_segments, d, n
 
 
+def remove_staves(img_name):
+    image = load_image(img_name)
+    image = image.to_onebit()
+    ms = musicstaves_rl_simple.MusicStaves_rl_simple(image)
+    ms.remove_staves(num_lines=5)
+    return ms.image
+
+
 def detect_noteheads(img_name, min, max):
     img = cv2.imread(img_name, 0)
     img = cv2.medianBlur(img, 5)
     cimg = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
 
-    circles = cv2.HoughCircles(img, cv.CV_HOUGH_GRADIENT, 1, 20,
-                               param1=50, param2=30, minRadius=min,
-                               maxRadius=max)
+    circles = cv2.HoughCircles(img, cv2.cv.CV_HOUGH_GRADIENT, 1.5, 10, maxRadius=max)
+    print circles
 
-    circles = np.uint16(np.around(circles))
-    for i in circles[0, :]:
-        # draw the outer circle
-        cv2.circle(cimg, (i[0], i[1]), i[2], (0, 255, 0), 2)
-        # draw the center of the circle
-        cv2.circle(cimg, (i[0], i[1]), 2, (0, 0, 255), 3)
+    if circles is not None:
+        circles = np.uint16(np.around(circles))
+        for i in circles[0, :]:
+            # draw the outer circle
+            cv2.circle(cimg, (i[0], i[1]), i[2], (0, 255, 0), 2)
+            # draw the center of the circle
+            cv2.circle(cimg, (i[0], i[1]), 2, (0, 0, 255), 3)
 
     cv2.imshow('detected circles', cimg)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
 
+# def rle(array):
+#     for i in range(len(array)):
+
+
+def get_row(img, i):
+    return [img.get((j, i)) for j in range(img.ncols)]
+
+
+def get_col(img, j):
+    return [img.get((j, i)) for i in range(img.nrows)]
+
+
+def rle(array):
+    run_length = 0
+    run_start = 0
+    current_value = 0  # empieza a contar los blancos
+    r = []
+    for i in range(len(array)):
+        if current_value == array[i]:
+            run_length += 1
+        else:
+            r.append((run_start, run_length))
+            run_length = 1
+            run_start = i
+            if current_value:
+                current_value = 0
+            else:
+                current_value = 1
+    r.append((run_start, run_length))
+    return r
+
+
 if __name__ == '__main__':
+    init_gamera()
     staves, space, line = detect_staves("imagenes/"+sys.argv[1])
     staff_segments = []
     for i, staff in enumerate(staves):
@@ -69,28 +107,31 @@ if __name__ == '__main__':
     s = staff_segments[0]
     xp = s.projection_cols()
     ini = 0
+    contador = 0
     in_segment = False
     for i in range(len(xp)):
         if not in_segment and xp[i] > 5*line:
             ini = i
             in_segment = True
         elif in_segment and xp[i] <= 5*line:
-            level0.append((ini, i))
-            img2 = SubImage(s, Point(ini, s.offset_y), Point(i, s.offset_y+s.nrows-1))
-            img2.save_PNG("imagenes/staff_segments/level0/{0}.png".format(len(level0)))
+            contador += 1
+            filename = "imagenes/staff_segments/level0/{0}.png".format(contador)
+            img2 = SubImage(s, Point(ini-2, s.offset_y), Point(i, s.offset_y+s.nrows-1))
+            img2.save_PNG(filename)
+            img2 = remove_staves(filename)
+            img2.save_PNG(filename)
+            level0.append(img2)
             in_segment = False
 
-
-
-
-
     # NOTE HEAD DETECTION
+    for i in range(level0[3].ncols):
+        black_runs = rle(get_col(level0[3], i))[1::2]
+        important_runs = []
+        for start, length in black_runs:
+            if space <= length and length < 2*space:
+                important_runs.append((start, i, length))
+        print important_runs
 
 
 
     # LEVEL 1 SEGMENTATION
-
-
-
-    # xp = img.projection_cols()
-    # yp = img.projection_rows()
