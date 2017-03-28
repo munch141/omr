@@ -103,35 +103,53 @@ if __name__ == '__main__':
 
     # LEVEL 0 SEGMENTATION
     level0 = []
-    #for s in staff_segments:
-    s = staff_segments[0]
-    xp = s.projection_cols()
-    ini = 0
     contador = 0
-    in_segment = False
-    for i in range(len(xp)):
-        if not in_segment and xp[i] > 5*line:
-            ini = i
-            in_segment = True
-        elif in_segment and xp[i] <= 5*line:
-            contador += 1
-            filename = "imagenes/staff_segments/level0/{0}.png".format(contador)
-            img2 = SubImage(s, Point(ini-2, s.offset_y), Point(i, s.offset_y+s.nrows-1))
-            img2.save_PNG(filename)
-            img2 = remove_staves(filename)
-            img2.save_PNG(filename)
-            level0.append(img2)
-            in_segment = False
+    for s in staff_segments:
+        s = staff_segments[0]
+        xp = s.projection_cols()
+        ini = 0
+        in_segment = False
+        for i in range(len(xp)):
+            if not in_segment and xp[i] > 5*line:
+                ini = i
+                in_segment = True
+            elif in_segment and xp[i] <= 5*line:
+                contador += 1
+
+                filename = "imagenes/staff_segments/level0/{0}.png".format(contador)
+                img = SubImage(s, Point(ini-2, s.offset_y), Point(i, s.offset_y+s.nrows-1))
+                img.save_PNG(filename)
+
+                img = remove_staves(filename)
+                img = img.trim_image()
+                img.save_PNG(filename)
+
+                ccs = img.cc_analysis()
+                for c, cc in enumerate(ccs):
+                    filename = "imagenes/staff_segments/level0/ccs/{0}.png".format((contador, c))
+                    cc.save_PNG(filename)
+                    img = load_image(filename)
+                    level0.append(img)
+                in_segment = False
 
     # NOTE HEAD DETECTION
-    for i in range(level0[3].ncols):
-        black_runs = rle(get_col(level0[3], i))[1::2]
-        important_runs = []
-        for start, length in black_runs:
-            if space <= length and length < 2*space:
-                important_runs.append((start, i, length))
-        print important_runs
-
+    for img in level0:
+        for col in range(img.ncols):
+            black_runs = rle(get_col(img, col))[1::2]
+            for run in black_runs:
+                if run[1] >= 2*space:
+                    for row in range(run[0]+run[1]/2, run[0]+run[1]/2+space/4):
+                        img.set(Point(col, row), 0)
+        ccs = img.cc_analysis()
+        for c, cc in enumerate(ccs):
+            yp = cc.projection_rows()
+            for i in range(len(yp)):
+                if yp[i] < space/2:
+                    for j in range(cc.ncols):
+                        cc.set(Point(j, i), 0)
+            img2 = cc.trim_image()
+            img2.save_PNG('red_neuronal/input/trim{0}.png'.format(c))
+    #img.save_PNG('img.png')
 
 
     # LEVEL 1 SEGMENTATION

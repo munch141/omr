@@ -1,3 +1,5 @@
 OpenOMR/*
 gamera/*
 pdfs/*
+*.pyc
+red_neuronal/input/*
